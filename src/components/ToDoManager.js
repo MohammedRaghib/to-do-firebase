@@ -7,9 +7,13 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  query,
+  where,
 } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext'; // Import your Auth context
 
 const ToDoManager = () => {
+  const { currentUser } = useAuth(); // Get the current user from context
   const [todos, setTodos] = useState([]);
   const [categories, setCategories] = useState([]);
   const [newTodo, setNewTodo] = useState({
@@ -23,8 +27,11 @@ const ToDoManager = () => {
   const [currentEditTodo, setCurrentEditTodo] = useState(null); // Track the to-do being edited
 
   const fetchTodos = async () => {
+    // Fetch todos specific to the current user
+    if (!currentUser) return; // If no user is logged in, do nothing
     const todosCollection = collection(db, 'todos');
-    const todoSnapshot = await getDocs(todosCollection);
+    const q = query(todosCollection, where('userId', '==', currentUser.uid)); // Query for user's todos
+    const todoSnapshot = await getDocs(q);
     const todoList = todoSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     setTodos(todoList);
   };
@@ -39,11 +46,18 @@ const ToDoManager = () => {
   useEffect(() => {
     fetchTodos();
     fetchCategories();
-  }, []);
+  }, [currentUser]); // Fetch todos whenever currentUser changes
 
   const addTodo = async (e) => {
     e.preventDefault();
-    await addDoc(collection(db, 'todos'), newTodo);
+    if (!currentUser) return; // Prevent adding todos if no user is logged in
+
+    // Include userId in the new todo
+    await addDoc(collection(db, 'todos'), {
+      ...newTodo,
+      userId: currentUser.uid, // Associate the todo with the current user
+    });
+
     setNewTodo({
       title: '',
       description: '',
@@ -52,18 +66,18 @@ const ToDoManager = () => {
       priority: 'low',
       completed: false,
     });
-    fetchTodos();
+    fetchTodos(); // Refresh the todo list after adding
   };
 
   const updateTodo = async (id, updatedData) => {
     const todoRef = doc(db, 'todos', id);
     await updateDoc(todoRef, updatedData);
-    fetchTodos();
+    fetchTodos(); // Refresh the todo list after updating
   };
 
   const deleteTodo = async (id) => {
     await deleteDoc(doc(db, 'todos', id));
-    fetchTodos();
+    fetchTodos(); // Refresh the todo list after deletion
   };
 
   const handleEditClick = (todo) => {
@@ -227,13 +241,19 @@ const ToDoManager = () => {
                     onClick={() => updateTodo(todo.id, { ...todo, completed: !todo.completed })}
                     className="bg-yellow-500 text-white rounded-lg p-2"
                   >
-                    Toggle Complete
+                    {todo.completed ? 'Mark as Incomplete' : 'Mark as Complete'}
                   </button>
-                  <button onClick={() => deleteTodo(todo.id)} className="bg-red-500 text-white rounded-lg p-2">
-                    Delete
-                  </button>
-                  <button onClick={() => handleEditClick(todo)} className="bg-blue-500 text-white rounded-lg p-2">
+                  <button
+                    onClick={() => handleEditClick(todo)}
+                    className="bg-blue-500 text-white rounded-lg p-2"
+                  >
                     Edit
+                  </button>
+                  <button
+                    onClick={() => deleteTodo(todo.id)}
+                    className="bg-red-500 text-white rounded-lg p-2"
+                  >
+                    Delete
                   </button>
                 </div>
               </>
